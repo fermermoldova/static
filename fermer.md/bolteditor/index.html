@@ -1,0 +1,22 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+<head>	
+	<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>	
+	<script src="js/jquery.bolteditor.js"></script>	
+	<script type="text/javascript">
+	$(document).ready(function(){
+		$('#input01').bolteditor();
+		$('#input02').bolteditor({
+			width:600
+		});
+	});
+	</script>	
+</head>
+<body>
+
+	<textarea id="input01" style="width:100%;height:300px;"></textarea>
+	<br><br>
+	<textarea id="input02" style="width:600px;height:200px;"></textarea>
+
+</body>
+</html>

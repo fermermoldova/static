@@ -1,0 +1,810 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+<head>		
+	<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+	<script src="js/jquery.ui.position.min.js"></script>
+	<script src="js/jquery.swfobject111.js"></script>
+	<script src="js/jquery.imgurflash.js"></script>
+
+<script>
+/**
+BoltEditor
+Version: 0.3.1
+Release date: 2011-11-27
+Author: Vasile Ermicioi
+**/
+
+/**
+outerHTML plugin
+**/
+$.fn.outerHTML = function() {
+	return $(this).clone().wrap('<div></div>').parent().html();
+}
+
+/**
+popup plugin
+**/
+jQuery.fn.popup = function(el) {
+	return this.each(function() {
+		var o=$(this);
+		var pop=$('<div style="position:absolute;background:#eeeeee;border:2px solid #cccccc">').append(el).appendTo(document.body).hide();
+		pop.click(function(ev){ev.stopPropagation()});
+		o.click(function(ev){
+			pop.toggle();
+			if (pop.is(':visible')){
+				pop.position({of:o,my:"left top",at:"left bottom",collision: "fit"});
+			}
+			ev.stopPropagation();
+		});
+		var h=function(){pop.hide()};
+		$(document).click(h);
+		$(iframeID).contents().click(h);//specific for this editor
+		o.bind('close',h);
+		return o;
+	});
+}
+
+/**
+colorPicker plugin
+**/
+jQuery.fn.colorPicker = function() {
+	return this.each(function() {
+		var o=$(this);
+		var t=$('<table cellspacing=1 style="cursor:pointer">');
+		var pop=$('<div style="position:absolute;background:#000;z-index:1000000;">').width(198);				
+		pop.append(t).appendTo(document.body).hide();
+		for(var i=0;i<12;i++){
+			var tr=$('<tr>').appendTo(t);
+			for (var j=0;j<18;j++){
+			   var r=(Math.floor(i/6)*9+Math.floor(j/6)*3).toString(16);
+			   var g=(j%6*3).toString(16);
+			   var b=(i%6*3).toString(16);
+			   tr.append('<td bgcolor="#'+r+r+g+g+b+b+'" width=10 height=10>');
+			}
+		}
+		t.find('td')
+			.click(function(ev){
+				var c=$(this).attr('bgcolor');				
+				o.val(c);
+				o.trigger('change',c);
+				ev.stopPropagation();
+				pop.hide();
+			});
+		o.click(function(ev){
+			pop.toggle();
+			if (pop.is(':visible')){
+				pop.position({of:o,my:"left top",at:"left bottom",collision: "fit"});
+			}
+			ev.stopPropagation();
+		});
+		var h = function(){pop.hide()};
+		$(document).click(h);
+		$(iframeID).contents().click(h);//specific for this editor
+		o.bind('close',h);
+		o.attr('unselectable', 'on');
+		o.find(":not(:text,textarea)").attr('unselectable', 'on');
+		return o;
+	});
+}
+
+/**
+editor properties
+**/
+var iframeID = '#iframeEditable';
+var editor_options = {};
+var editor_toolbars = [
+	["separator2","fontname","heading","fontsize","separator","forecolor","backcolor","separator","bold","italic","underline","strikethrough","separator","subscript","superscript","separator","inserthorizontalrule","separator","unlink","removeformat","separator"],
+	["separator2","undo","redo","inserttable","insertimage","createlink","separator","justifyfull","justifyleft","justifycenter","justifyright","separator","insertunorderedlist","insertorderedlist","outdent","indent","separator","viewsource","inserthtml","separator","emoticons","separator"]
+];
+
+
+/**
+public
+**/
+var getHtml = function(){
+	return editor_html();
+}
+var setHtml = function(c){	
+	editor_html(c);
+}
+window.getHtml = getHtml;
+window.setHtml = setHtml;
+document.getHtml = getHtml;
+document.setHtml = setHtml;
+
+
+/**
+editor functions
+**/
+function editor_contentDocument(){
+	return $(iframeID).contents().get(0);
+}
+
+function editor_focus(){
+	var iframe = $(iframeID).get(0);
+    if (iframe.contentWindow) {
+        iframe.contentWindow.focus();
+    } else if (iframe.contentDocument && iframe.contentDocument.documentElement) {
+        // For old versions of Safari
+        iframe.contentDocument.documentElement.focus();
+    }
+}
+
+function editor_execCommand(c,a){	
+	editor_focus();
+	var doc = editor_contentDocument();
+	doc.execCommand(c,false,a);
+	editor_focus();
+}
+
+function editor_getSelectedHtml(){
+	var iframe=$(iframeID).get(0);
+	if (iframe.contentWindow.document.selection) {
+		return iframe.contentWindow.document.selection.createRange().htmlText;
+	} else {
+		return $('<div>').append(iframe.contentWindow.getSelection().getRangeAt(0).cloneContents()).html();
+	}
+}
+
+function editor_getSelectedText(){
+	return $(editor_getSelectedHtml()).text();
+}
+
+function editor_html(value) {	
+	doc = editor_contentDocument();
+	if (typeof value != "undefined"){		
+		doc.body.innerHTML = value;
+	}
+	else{
+		return doc.body.innerHTML;
+	}
+}
+
+function editor_getSelectedNode(){
+	try{
+		var iframe=$(iframeID).get(0);
+		if (iframe.contentWindow.document.selection) {
+			return iframe.contentWindow.document.selection.createRange().parentElement();
+		} else {
+			return iframe.contentWindow.getSelection().getRangeAt(0).commonAncestorContainer;
+		}
+	}
+	catch(err){}
+	return null;
+}
+
+function editor_unselectable(el){
+	el.attr('unselectable', 'on').addClass('unselectable');
+	el.find(":not(:text,textarea)").attr('unselectable', 'on').addClass('unselectable');
+}
+
+function editor_init() {
+	//options
+	var iconsPath = editor_options && editor_options.iconsPath  || 'icons/';
+	var imgurFlashPath = editor_options && editor_options.imgurFlashPath  || 'swf/';
+	var divToolbars=$('#toolbars'),ifrm=$(iframeID).get(0);
+	$(iframeID).ready(function(){		
+		var doc = editor_contentDocument();
+		doc.body.contentEditable = true;
+		doc.designMode='on';
+	});
+	var toolbars=(editor_options && editor_options.toolbars)?editor_options.toolbars:editor_toolbars;	
+	$.each(toolbars, function(k,toolbar){
+		var t = $('<div class="wysiwyg_toolbar"></div>').appendTo(divToolbars);
+		$.each(toolbar,function(i,v){
+			if (v == 'separator' || v == "separator2"){
+				$('<img src="'+iconsPath+v+'.png" class="wysiwyg-icon">').appendTo(t);
+			}
+			else{
+				var btn=$('<img src="'+iconsPath+v+'.png" class="wysiwyg-icon">').appendTo(t);
+				var el=$('#plugin_'+v);
+				editor_unselectable(el);
+				btn.hover(function(){btn.toggleClass('clickable')});				
+				btn.click(function(){$(document).trigger('click');});
+				switch(v){
+					case 'fontname':						
+						el.find('td').click(function(){
+							var fnt=$(this).text();
+							editor_execCommand('fontname', fnt);
+							btn.trigger('close');
+						});						
+						btn.popup(el);
+						break;
+					case 'fontsize':
+						el.find('td').click(function(){
+							var size=$(this).text().substr(4);
+							editor_execCommand('fontsize',size);
+							btn.trigger('close');
+						});
+						btn.popup(el);
+						break;
+					case 'heading':
+						el.find('td').click(function(){
+							var h=$(this).text();
+							editor_execCommand('formatblock','<'+h+'>');
+							btn.trigger('close');
+						});
+						btn.popup(el);
+						break;
+					case 'createlink':
+						el.find('input:submit:first').click(function(){									
+							var a=$('<a>');
+							var props=['href','class','target','name','style'];
+							for (var i=0;i<props.length;i++){
+								var v=el.find('#'+props[i]).val();
+								if(props[i]=='href')v=encodeURI(v);
+								if (v!=null && v!="")a.attr(props[i],v);
+							}							
+							a.html(editor_getSelectedHtml());
+							editor_execCommand('inserthtml', a.outerHTML());
+						});
+						el.find('input:submit').click(function(){btn.trigger('close');});
+						btn.popup(el);
+						break;
+					case 'insertimage':							
+						el.find('#src').imgurflash({
+							image_width:2048, 
+							image_height:2048,
+							extension:'jpg',
+							scaling:'fit',
+							swfpath: imgurFlashPath+'imgurflash.swf'
+						});
+						el.find('input:submit:first').click(function(){									
+							var props=['src','style','align','border','alt','hspace','vspace','width','height'];									
+							var img=$('<img>');
+							for (var i=0;i<props.length;i++){
+								var v=el.find('#'+props[i]).val();
+								if(props[i]=='src')v=encodeURI(v);
+								if (v!=null && v!="")img.attr(props[i],v);
+							}
+							editor_execCommand('inserthtml',img.outerHTML());
+						});
+						el.find('input:submit').click(function(){btn.trigger('close');});
+						btn.click(function(){								
+							var selNode = editor_getSelectedNode();
+							if (selNode && $(selNode).find('img').length){
+								var img = $(selNode).find('img:first');									
+								var props=['src','style','align','border','alt','hspace','vspace','width','height'];
+								for (var i=0;i<props.length;i++){
+									el.find('#'+props[i]).val(img.attr(props[i]));										
+								}
+							}
+						});
+						btn.popup(el);
+						break;
+					case 'inserthtml':
+						el.find('input:first').click(function(){
+							editor_execCommand('inserthtml',el.find('textarea:first').val());
+						});
+						el.find('input:submit').click(function(){btn.trigger('close');});
+						btn.click(function(){								
+							el.find('textarea:first').val("Insert html code");
+						});
+						btn.popup(el);
+						break;
+					case 'viewsource':
+						el.find('input:first').click(function(){
+							editor_html(el.find('textarea:first').val());
+						});
+						el.find('input:submit').click(function(){btn.trigger('close');});
+						btn.click(function(){
+							el.find('textarea:first').val(editor_html());
+						});
+						btn.popup(el);
+						break;
+					case 'inserttable':
+						$(el).find('#backgroundcolor,#bordercolor').colorPicker();
+						el.find('input:submit:first').click(function(){
+							var table = $('<table>');
+							for (var i=1;i<=el.find('#rows').val();i++){
+								var tr=$('<tr>').appendTo(table);
+								for (var j=1;j<=el.find('#cols').val();j++)
+									$('<td>'+i+' '+j+'</td>').appendTo(tr);
+							}											
+							if(el.find('#alignment').val())
+								table.attr('align',el.find('#alignment').val());										
+							var style = "";
+							if (el.find('#padding').val())style += "padding:" + el.find('#padding').val() + "px;";
+							if(el.find('#width').val())style += "width:" + el.find('#width').val() + el.find('#widthType').val() + ";";
+							if(el.find('#border').val())style += "border:" + el.find('#border').val() + "px;";
+							if(el.find('#borderstyle').val() != "none")
+								style += "border-style:" + el.find('#borderstyle').val() + ";";
+							if(el.find('#bordercolor').val() != "none")
+								style += "border-color:" + el.find('#bordercolor').value + ";";
+							var collapse = el.find('#bordercollapse').attr('checked') ? "true" : "separate";
+							style += "border-collapse:" + collapse + ";";
+							if(el.find('#backgroundcolor').val() != "none")
+								style += "background-color:" + el.find('#backgroundcolor').val() + ";";
+							table.attr("style", style);
+							editor_execCommand('inserthtml',table.outerHTML());
+						});
+						el.find('input:submit').click(function(){btn.trigger('close');});
+						btn.popup(el);
+						break;
+					case 'emoticons':	
+						el.width(250);
+						el.find('img').click(function(){
+							new_el = $(this).clone();
+							new_el.removeAttr('unselectable').removeAttr('class');
+							editor_execCommand('inserthtml',$(new_el).outerHTML());
+							btn.trigger('close');
+						});
+						el.find('input:submit').click(function(){btn.trigger('close');});
+						btn.popup(el);
+						break;
+					case 'forecolor':
+					case 'backcolor':
+							btn.colorPicker().bind("change", function(ev,c){
+								editor_execCommand(v,c);
+							});
+							break;
+					case 'removeformat':
+						btn.click(function(ev){
+							editor_execCommand('removeformat');
+							editor_execCommand('unlink');								
+						});								
+						break;
+					default:
+						btn.click(function(ev){
+							editor_execCommand(v);
+						})		
+						break;
+				}
+			}
+		});	
+		editor_unselectable(divToolbars);
+	})	
+}
+
+/**
+Lets start
+**/
+$(document).ready(function(){
+	editor_init();
+});	
+</script>
+
+<style>
+html,body{
+	height:100%;
+	overflow:hidden;
+	margin:0;
+	padding:0;
+}
+.wysiwyg_editarea{
+	overflow: auto;	
+	width:100%;
+	height:100%;	
+}
+.wysiwyg_toolbar {
+	background-image:url(icons/background_silver.jpg);
+	padding:1px 1px 1px 1px;
+}
+.wysiwyg-icon{
+	display:inline-block;	
+	border:1px solid transparent;	
+	height:20px;
+}
+.wysiwyg-icon.clickable{
+	cursor:pointer;
+	border:1px solid #aaaaaa;
+}
+.unselectable{
+	-webkit-user-select: none;
+	-khtml-user-select: none;
+	-moz-user-select: none;
+	-o-user-select: none;
+	user-select: none;
+}
+/*plugins*/
+#fonts td{
+	padding:3px 3px 3px 3px;	
+	border:1px solid #fff;
+}
+#fonts td:hover{
+	background:#ddddff;
+	border:1px solid #aaa;
+}
+
+#headings td{
+	padding:1px 3px 1px 3px;	
+	border:1px solid #fff;
+}
+#headings td:hover{
+	background:#ddddff;
+	border:1px solid #aaa;
+}
+
+#fontsizes td{
+	padding:3px 3px 3px 3px;	
+	border:1px solid #fff;
+}
+#fontsizes td:hover{
+	background:#ddddff;
+	border:1px solid #aaa;
+}
+
+.table-settings {
+	background-color: #F7F7F7; 
+	border: 2px solid #FFFFFF; 
+	padding: 5px;		
+}
+.table-settings *{
+	font-family: helvetica; 
+	font-size: 11px;	
+}
+</style>
+		
+</head>
+<body>
+
+<div style="display:none;"><!-- start plugins -->
+<div id="plugin_fontname">
+	<div style="background:#ffffff;cursor:pointer;width:145px;height:200px;overflow:auto">
+		<table id="fonts" width="100%">
+			<tr><td><font style="font-family:Andale Mono;font-size:12px;">Andale Mono</font></td></tr>
+			<tr><td><font style="font-family:Arial;font-size:12px;">Arial</font></td></tr>
+			<tr><td><font style="font-family:Arial Black;font-size:12px;">Arial Black</font></td></tr>
+			<tr><td><font style="font-family:Avant Garde;font-size:12px;">Avant Garde</font></td></tr>
+			<tr><td><font style="font-family:Bookman;font-size:12px;">Bookman</font></td></tr>
+			<tr><td><font style="font-family:Century Schoolbook;font-size:12px;">Century Schoolbook</font></td></tr>
+			<tr><td><font style="font-family:Comic Sans MS;font-size:12px;">Comic Sans MS</font></td></tr>
+			<tr><td><font style="font-family:Courier;font-size:12px;">Courier</font></td></tr>
+			<tr><td><font style="font-family:Courier New;font-size:12px;">Courier New</font></td></tr>
+			<tr><td><font style="font-family:Garamond;font-size:12px;">Garamond</font></td></tr>
+			<tr><td><font style="font-family:Georgia;font-size:12px;">Georgia</font></td></tr>
+			<tr><td><font style="font-family:Helvetica;font-size:12px;">Helvetica</font></td></tr>
+			<tr><td><font style="font-family:Impact;font-size:12px;">Impact</font></td></tr>
+			<tr><td><font style="font-family:Palatino;font-size:12px;">Palatino</font></td></tr>
+			<tr><td><font style="font-family:Tahoma;font-size:12px;">Tahoma</font></td></tr>
+			<tr><td><font style="font-family:Times;font-size:12px;">Times</font></td></tr>
+			<tr><td><font style="font-family:Times New Roman;font-size:12px;">Times New Roman</font></td></tr>
+			<tr><td><font style="font-family:Trebuchet MS;font-size:12px;">Trebuchet MS</font></td></tr>
+			<tr><td><font style="font-family:Verdana;font-size:12px;">Verdana</font></td></tr>
+		</table>
+	</div>
+</div>
+<div id="plugin_heading">
+	<div style="background:#ffffff;cursor:pointer;width:70px;height:135px;overflow:auto">
+		<table id="headings" width="100%">
+			<tr><td><h1 style="margin:0px;text-decoration:none;font-family:Arial">H1</h1></td></tr>
+			<tr><td><h2 style="margin:0px;text-decoration:none;font-family:Arial">H2</h2></td></tr>
+			<tr><td><h3 style="margin:0px;text-decoration:none;font-family:Arial">H3</h3></td></tr>
+			<tr><td><h4 style="margin:0px;text-decoration:none;font-family:Arial">H4</h4></td></tr>
+			<tr><td><h5 style="margin:0px;text-decoration:none;font-family:Arial">H5</h5></td></tr>
+			<tr><td><h6 style="margin:0px;text-decoration:none;font-family:Arial">H6</h6></td></tr>
+		</table>
+	</div>
+</div>
+<div id="plugin_viewsource">
+	<textarea style="width:400px;height:200px"></textarea>
+	<div align="right">
+		<input type="submit" value="  Submit  ">
+		&nbsp;
+		<input type="submit" value="  Cancel  ">
+	</div>
+</div>
+<div id="plugin_inserthtml">
+	<textarea style="width:400px;height:200px"></textarea>
+	<div align="right">
+		<input type="submit" value="  Submit  ">
+		&nbsp;
+		<input type="submit" value="  Cancel  ">
+	</div>
+</div>
+<div id="plugin_createlink">
+	<table class="table-settings"><tr><td>
+		<table>
+			<tr>
+				<td>URL:</td>
+				<td>
+					<input id="href" value="http://">
+				</td>			
+				<td>Target:</td>
+				<td>
+					<select id="target">
+						<option value="" selected>no target</option>
+						<option value="_blank">_blank</option>
+						<option value="_self">_self</option>
+						<option value="_parent">_parent</option>
+						<option value="_top">_top</option>
+					</select>
+				</td>	
+			</tr>
+			<tr>
+				<td>Style:</td>
+				<td>
+					<input id="style" value="">
+				</td>
+				<td>Class:</td>
+				<td>
+					<input id="class" value="">
+				</td>
+			</tr>
+			<tr>
+				<td>Name:</td>
+				<td>
+					<input id="name" value="">
+				</td>	
+			</tr> 
+		</table>
+		<div align="right" ><input type="submit" value="  Submit  " >&nbsp;<input type="submit" value="  Cancel  "></div>
+	</td></tr></table>
+</div>
+<div id="plugin_fontsize">
+	<div style="background:#ffffff;cursor:pointer;width:135px;height:200px;overflow:auto">
+		<table id="fontsizes">
+			<tr><td><font size="1">Size 1</font></td></tr>
+			<tr><td><font size="2">Size 2</font></td></tr>
+			<tr><td><font size="3">Size 3</font></td></tr>
+			<tr><td><font size="4">Size 4</font></td></tr>
+			<tr><td><font size="5">Size 5</font></td></tr>
+			<tr><td><font size="6">Size 6</font></td></tr>
+			<tr><td><font size="7">Size 7</font></td></tr>
+		</table>
+	</div>
+</div>
+<div id="plugin_insertimage">
+	<table class="table-settings"><tr><td>
+		<table>
+		 <tr>
+			<td>Image URL:</td>
+			<td>
+				<input type="text" name="src" id="src" value=""  style="width: 200px;">	
+			</td>
+		 </tr>
+		 <tr>
+			<td>Alternate Text:</td>
+			<td><input type="text" name="alt" id="alt" value=""  style="width: 100%;"></td>
+		 </tr>
+		</table>
+		<table><tr><td style="vertical-align:top;">		
+			<table>
+				<tr>
+				  <td>Width:</td>
+				  <td><input type="text" name="width" id="width" value=""  style="width: 50px;"></td>
+				</tr>
+				<tr>
+					<td>Height:</td>
+					<td><input type="text" name="height" id="height" value=""  style="width: 50px;"></td>
+				</tr>
+				<tr>
+					<td>Border:</td>
+					<td><input type="text" name="border" id="border" value="0"  style="width: 50px;"></td>
+				</tr>
+			</table>
+		</td>
+		<td width="10">&nbsp;</td>
+		<td style="vertical-align:top;">		
+			<table>
+				<tr>
+				    <td>Alignment:</td>
+					<td>
+						<select name="align" id="align">
+							<option value="">Not Set</option>
+							<option value="left">Left</option>
+							<option value="right">Right</option>
+							<option value="texttop">Texttop</option>
+							<option value="absmiddle">Absmiddle</option>
+							<option value="baseline">Baseline</option>
+							<option value="absbottom">Absbottom</option>
+							<option value="bottom">Bottom</option>
+							<option value="middle">Middle</option>
+							<option value="top">Top</option>
+						</select>
+					</td>
+				</tr>
+				<tr>
+					<td>Horizontal Space:</td>
+					<td><input type="text" name="hspace" id="hspace" value=""  style="width: 50px;"></td>
+				</tr>
+				<tr>
+					<td>Vertical Space:</td>
+					<td><input type="text" name="vspace" id="vspace" value=""  style="width: 50px;"></td>
+				</tr>
+			</table>
+		</td></tr></table>
+		<div align="right"><input type="submit" value="  Submit  ">&nbsp;<input type="submit" value="  Cancel  "></div>
+	</td></tr></table>
+</div>
+<div id="plugin_inserttable">	
+	<table class="table-settings"><tr><td>
+	<table>
+		<tr>
+			<td style="width: 20%;">
+				Rows:
+			</td>
+			<td style="width: 25%;">
+				<input type="text" size="4" id="rows" name="rows" value="2" style="width: 50px;">
+			</td>
+			<td style="width: 25%;">
+				Width:
+			</td>
+			<td style="width: 30%;white-space:nowrap;">
+				<input type="text" name="width" id="width" value="100" size="10" style="width: 50px;">
+				<select name="widthType" id="widthType">
+					<option value="%">%</option>
+					<option value="px">px</option>
+				</select>
+			</td>
+		</tr>
+		<tr>
+			<td>
+				Cols:
+			</td>
+			<td>
+				<input type="text" size="4" id="cols" name="cols" value="2"	style="width: 50px;">
+			</td>
+			<td>
+				Alignment:
+			</td>
+			<td>
+				<select name="alignment" id="alignment">
+					<option value="">Not Set</option>
+					<option value="left">Left</option>
+					<option value="right">Right</option>
+					<option value="center">Center</option>
+				</select>
+			</td>
+		</tr>
+		<tr>
+			<td>
+				Padding:
+			</td>
+			<td>
+				<input type="text" id="padding" name="padding" value="2" style="width:50px;">
+			</td>
+			<td>
+				Background-Color:
+			</td>
+			<td>
+				<input type="text" name="backgroundcolor" id="backgroundcolor" value="none" style="width:50px;">
+			</td>
+		</tr>
+		<tr>
+			<td>
+				Border-Size:
+			</td>
+			<td>
+				<input type="text" size="4" id="border" name="border" value="0" style="width:50px;">
+			</td>
+			<td>
+				Border-Color:
+			</td>
+			<td>
+				<input type="text" name="bordercolor" id="bordercolor" value="none" style="width:50px;">
+			</td>
+		</tr>
+		<tr>
+			<td>
+				Border-Style:
+			</td>
+			<td>
+				<select id="borderstyle">
+					<option value="none">none</option>
+					<option value="solid">solid</option>
+					<option value="double">double</option>
+					<option value="dotted">dotted</option>
+					<option value="dashed">dashed</option>
+					<option value="groove">groove</option>
+					<option value="ridge">ridge</option>
+					<option value="inset">inset</option>
+					<option value="outset">outset</option>
+				</select>
+			</td>
+			<td>
+				Border-Collapse:
+			</td>
+			<td>
+				<input type="checkbox" name="bordercollapse" id="bordercollapse">
+			</td>
+		</tr>
+	</table>
+	<div align="right">
+		<input type="submit" value="  Submit  ">
+		&nbsp;
+		<input type="submit" value="  Cancel  ">
+	</div>
+	</td></tr></table>
+</div>
+<div id="plugin_emoticons">
+	<img src="http://lh6.googleusercontent.com/-OcWpCpOHOG8/TuJSo80k4eI/AAAAAAAACcs/lh-Oxi89r2I/emoticon-00185-heidy.gif" alt="heidy">
+	<img src="http://lh3.googleusercontent.com/-xHTuvSKd_T8/TuJSowX9T0I/AAAAAAAACcw/n4nBumsQrIM/emoticon-00100-smile.gif" alt="smile">
+	<img src="http://lh4.googleusercontent.com/-U4I5KAmHIAk/TuJSozhueFI/AAAAAAAACc0/qrbxfxjMg0Q/emoticon-00101-sadsmile.gif" alt="sadsmile">
+	<img src="http://lh5.googleusercontent.com/-FRNq9kvEnlw/TuJSpUfBiiI/AAAAAAAACdA/POqvQ1ynGXw/emoticon-00102-bigsmile.gif" alt="bigsmile">
+	<img src="http://lh5.googleusercontent.com/-Zn2mFWog2Gk/TuJSpnTIjLI/AAAAAAAACdI/yqRg9QgaPM0/emoticon-00103-cool.gif" alt="cool">
+	<img src="http://lh3.googleusercontent.com/-xY44mS71c0U/TuJSp3MhBbI/AAAAAAAACc8/YM9XJvqfAdQ/emoticon-00105-wink.gif" alt="wink">
+	<img src="http://lh3.googleusercontent.com/-Mx3TMmkSlmU/TuJSqNd881I/AAAAAAAACdU/AOwVJXXWZCE/emoticon-00106-crying.gif" alt="crying">
+	<img src="http://lh3.googleusercontent.com/-8PAqn2ueECk/TuJSqWxbNrI/AAAAAAAACdQ/e5UZHnvFufI/emoticon-00107-sweating.gif" alt="sweating">
+	<img src="http://lh3.googleusercontent.com/-7yDgtwVNAIs/TuJSqwvxNDI/AAAAAAAACdc/8mxG58-moeQ/emoticon-00108-speechless.gif" alt="speechless">
+	<img src="http://lh4.googleusercontent.com/-wPAkk7-OIGc/TuJSrEhlNhI/AAAAAAAACdk/9q6HUc9kJ10/emoticon-00109-kiss.gif" alt="kiss">
+	<img src="http://lh3.googleusercontent.com/-cO7WFkRbVn0/TuJSrCXYSlI/AAAAAAAACdo/U3omyZa43kY/emoticon-00110-tongueout.gif" alt="tongueout">
+	<img src="http://lh4.googleusercontent.com/-SVPCqYizIJ8/TuJSrmSztiI/AAAAAAAACds/nYuItr1lmlA/emoticon-00111-blush.gif" alt="blush">
+	<img src="http://lh3.googleusercontent.com/-EYBcLB5AjvQ/TuJSxYVjnpI/AAAAAAAACfI/fmcMouBgbgM/emoticon-00112-wondering.gif" alt="wondering">
+	<img src="http://lh3.googleusercontent.com/-B8WkXuPhisI/TuJSsP4UlvI/AAAAAAAACd8/jNf4bLk2fQI/emoticon-00113-sleepy.gif" alt="sleepy">
+	<img src="http://lh3.googleusercontent.com/-GlsdA1LkCWo/TuJSseUXfmI/AAAAAAAACeE/spmZqRr-72Y/emoticon-00114-dull.gif" alt="dull">
+	<img src="http://lh6.googleusercontent.com/-7LrEPfwYsRA/TuJStMt7OGI/AAAAAAAACeM/meGGi0QRtC4/emoticon-00115-inlove.gif" alt="inlove">
+	<img src="http://lh6.googleusercontent.com/-3kXEF2G_3UA/TuJStYPmExI/AAAAAAAACeQ/mhRu1gm7qVQ/emoticon-00116-evilgrin.gif" alt="evilgrin">
+	<img src="http://lh5.googleusercontent.com/-3vk_oC3lDSs/TuJSuF8OUgI/AAAAAAAACeg/MS_nfsQGQpk/emoticon-00117-talking.gif" alt="talking">
+	<img src="http://lh5.googleusercontent.com/-AYUhhG0uNuQ/TuJSuPfCYYI/AAAAAAAACek/vohky8sma0M/emoticon-00118-yawn.gif" alt="yawn">
+	<img src="http://lh6.googleusercontent.com/-0OkFapflc8s/TuJSvFBzg3I/AAAAAAAACe0/aE8hLPOTPVw/emoticon-00119-puke.gif" alt="puke">
+	<img src="http://lh5.googleusercontent.com/-soY0iP7Y9H4/TuJSvY6JCVI/AAAAAAAACe4/-FQOKXH14bA/emoticon-00120-doh.gif" alt="doh">
+	<img src="http://lh6.googleusercontent.com/-i-mgyL5Yx_o/TuJSwroNlTI/AAAAAAAACe8/GCQavbQzEOg/emoticon-00121-angry.gif" alt="angry">
+	<img src="http://lh6.googleusercontent.com/-phl9FFCjZlg/TuJSxcaGgdI/AAAAAAAACfE/uFY2JshoMoM/emoticon-00122-itwasntme.gif" alt="itwasntme">
+	<img src="http://lh3.googleusercontent.com/-IDGWTwpQqs8/TuJSxbMH1lI/AAAAAAAACfQ/buYAVliRJBg/emoticon-00123-party.gif" alt="party">
+	<img src="http://lh6.googleusercontent.com/-7R2faQ112vc/TuJSx0VMOkI/AAAAAAAACfU/kzwNtRP7Jxc/emoticon-00124-worried.gif" alt="worried">
+	<img src="http://lh4.googleusercontent.com/-pEtuqZhMzuI/TuJSxzL6ucI/AAAAAAAACfo/KbO3P6lgRYs/emoticon-00125-mmm.gif" alt="mmm">
+	<img src="http://lh3.googleusercontent.com/-YrU1vUEA1o8/TuJSyGyQ-VI/AAAAAAAACfk/_RWXyxKx_8s/emoticon-00126-nerd.gif" alt="nerd">
+	<img src="http://lh6.googleusercontent.com/-5ZPocgIeBM0/TuJSybe6mvI/AAAAAAAACfc/dgGuLZL0CCQ/emoticon-00127-lipssealed.gif" alt="lipssealed">
+	<img src="http://lh3.googleusercontent.com/-XQaquiDD0aQ/TuJSzP1g2YI/AAAAAAAACf4/f8cmiKHQveU/emoticon-00128-hi.gif" alt="hi">
+	<img src="http://lh5.googleusercontent.com/-wQ8S_s5D24A/TuJS1UPNa8I/AAAAAAAACgM/BNaiPN1czCA/emoticon-00129-call.gif" alt="call">
+	<img src="http://lh3.googleusercontent.com/-IchdXRaXy_8/TuJSz2Z5QJI/AAAAAAAACf0/siQozh6EN4M/emoticon-00130-devil.gif" alt="devil">
+	<img src="http://lh4.googleusercontent.com/-X2Lrxcpgae0/TuJS0crM9AI/AAAAAAAACgE/KBVH-4rgk98/emoticon-00131-angel.gif" alt="angel">
+	<img src="http://lh3.googleusercontent.com/-VXvIONQlItU/TuJS0mbWjBI/AAAAAAAACgQ/l6PwOeKdPDc/emoticon-00132-envy.gif" alt="envy">
+	<img src="http://lh4.googleusercontent.com/-1JE_Dc2e-hY/TuJS1VHw9uI/AAAAAAAACgU/78k9Vk1iPk8/emoticon-00133-wait.gif" alt="wait">
+	<img src="http://lh3.googleusercontent.com/-KGhznJfC8Lo/TuJS2LAcgTI/AAAAAAAACgo/Ppkvr04mBgw/emoticon-00134-bear.gif" alt="bear">
+	<img src="http://lh4.googleusercontent.com/-TkgyZMmL49s/TuJS2L3pv-I/AAAAAAAACgc/ONUzsBtpwmk/emoticon-00135-makeup.gif" alt="makeup">
+	<img src="http://lh6.googleusercontent.com/-ddz-0bxg85Y/TuJS2DFbNUI/AAAAAAAACgg/NXuT0jyvHAY/emoticon-00136-giggle.gif" alt="giggle">
+	<img src="http://lh3.googleusercontent.com/-SUnxU5cGVHw/TuJS3DQEq5I/AAAAAAAACg0/DeZcWh9o-p0/emoticon-00137-clapping.gif" alt="clapping">
+	<img src="http://lh5.googleusercontent.com/-4_NEuKEfkuE/TuJS3J7ieqI/AAAAAAAACgs/6uvFviT0P54/emoticon-00138-thinking.gif" alt="thinking">
+	<img src="http://lh5.googleusercontent.com/-u_hRj1peZwk/TuJS3m7Eb-I/AAAAAAAACg8/jnwCm9chcII/emoticon-00139-bow.gif" alt="bow">
+	<img src="http://lh6.googleusercontent.com/-XbWmrafxh-M/TuJS3tch8hI/AAAAAAAAChM/OKNNctzj-YQ/emoticon-00140-rofl.gif" alt="rofl">
+	<img src="http://lh4.googleusercontent.com/-jr1_raEc-Qs/TuJS39M6awI/AAAAAAAAChU/EifsXsPNYWc/emoticon-00141-whew.gif" alt="whew">
+	<img src="http://lh5.googleusercontent.com/-8ZapQF2vJJY/TuJS4EgSF6I/AAAAAAAAChc/Qs0hImOphp8/emoticon-00142-happy.gif" alt="happy">
+	<img src="http://lh6.googleusercontent.com/-AwkvFY6I00M/TuJS4or5f-I/AAAAAAAAChY/fIj05bOG_A4/emoticon-00143-smirk.gif" alt="smirk">
+	<img src="http://lh5.googleusercontent.com/-dxNvpxWuJJs/TuJS7tYItpI/AAAAAAAACiI/pzICia1cE50/emoticon-00144-nod.gif" alt="nod">
+	<img src="http://lh5.googleusercontent.com/-li-MKp0C6Eo/TuJS5ky0CGI/AAAAAAAAChk/x50QVEWi2hw/emoticon-00145-shake.gif" alt="shake">
+	<img src="http://lh4.googleusercontent.com/-CCbRyO0mXKQ/TuJS5zIygtI/AAAAAAAACh0/KEe05gq-w_k/emoticon-00146-punch.gif" alt="punch">
+	<img src="http://lh6.googleusercontent.com/-4qnrsgUquko/TuJS6EPLgxI/AAAAAAAAChw/1qt0tN8bPWM/emoticon-00147-emo.gif" alt="emo">
+	<img src="http://lh6.googleusercontent.com/-wZ_lRQWOdIc/TuJS6-QkRMI/AAAAAAAACh4/s0r8dZQxfJM/emoticon-00148-yes.gif" alt="yes">
+	<img src="http://lh5.googleusercontent.com/-V5Z63dnzJgo/TuJS7OzSeAI/AAAAAAAACiA/T_fDE-9D1G0/emoticon-00149-no.gif" alt="no">
+	<img src="http://lh3.googleusercontent.com/-mtaK0xwoEKU/TuJS7VJTD2I/AAAAAAAACiY/RQZCPAongik/emoticon-00150-handshake.gif" alt="handshake">
+	<img src="http://lh3.googleusercontent.com/-nnROjLJXJqU/TuJS98QdBgI/AAAAAAAACi0/pOPTeD0Z9CE/emoticon-00151-skype.gif" alt="skype">
+	<img src="http://lh5.googleusercontent.com/-oynPbVcqqSY/TuJS70Br7ZI/AAAAAAAACiU/Is77jlDGa7k/emoticon-00152-heart.gif" alt="heart">
+	<img src="http://lh3.googleusercontent.com/-2Nz-F_a8sYM/TuJS8vQK5eI/AAAAAAAACik/J_aM88ux2Uc/emoticon-00153-brokenheart.gif" alt="brokenheart">
+	<img src="http://lh6.googleusercontent.com/-n7eGYLfok5M/TuJS88Ww8XI/AAAAAAAACis/Dko8ZU7BHvA/emoticon-00154-mail.gif" alt="mail">
+	<img src="http://lh6.googleusercontent.com/-x8dq8P5ebfM/TuJS_VOiJjI/AAAAAAAACjs/2DuwUxF9Zlw/emoticon-00155-flower.gif" alt="flower">
+	<img src="http://lh6.googleusercontent.com/-UPmePXEedOE/TuJS_Z6m1YI/AAAAAAAACjM/-Gznm1O3Ecs/emoticon-00156-rain.gif" alt="rain">
+	<img src="http://lh3.googleusercontent.com/-hLZrYHKJ2hg/TuJS-XaHqDI/AAAAAAAACi4/tQxuUYYthQs/emoticon-00157-sun.gif" alt="sun">
+	<img src="http://lh5.googleusercontent.com/-xSEZRJ5eMxM/TuJS-5hLTwI/AAAAAAAACjQ/RgLWlJZNmdk/emoticon-00158-time.gif" alt="time">
+	<img src="http://lh4.googleusercontent.com/-RO0ogT3wfIQ/TuJTAJ8RBPI/AAAAAAAACjU/T0_0fwOYdvw/emoticon-00159-music.gif" alt="music">
+	<img src="http://lh6.googleusercontent.com/-nVUUSb28qlA/TuJTABBT9JI/AAAAAAAACjc/HyNHF0aBBHA/emoticon-00160-movie.gif" alt="movie">
+	<img src="http://lh4.googleusercontent.com/-YaFWzoa1kns/TuJTDLI9mCI/AAAAAAAACko/CLat6B066lI/emoticon-00161-phone.gif" alt="phone">
+	<img src="http://lh5.googleusercontent.com/-uNFCokm6Ar0/TuJTAyHvBjI/AAAAAAAACjw/5hwTiynrH0E/emoticon-00162-coffee.gif" alt="coffee">
+	<img src="http://lh5.googleusercontent.com/-GY9bPuu8zR0/TuJTBvxMW4I/AAAAAAAACj0/UhqNJ5zjAoI/emoticon-00163-pizza.gif" alt="pizza">
+	<img src="http://lh5.googleusercontent.com/-uDzkzSBpzic/TuJTByt7JtI/AAAAAAAACj4/iPBp7PepIrA/emoticon-00164-cash.gif" alt="cash">
+	<img src="http://lh3.googleusercontent.com/-GD2psuGwmJU/TuJTCBmEN0I/AAAAAAAACkM/NncOhvIXDE0/emoticon-00165-muscle.gif" alt="muscle">
+	<img src="http://lh4.googleusercontent.com/-6_qm2B62euU/TuJTCdKsZqI/AAAAAAAACkA/riL5lk1XHbM/emoticon-00166-cake.gif" alt="cake">
+	<img src="http://lh6.googleusercontent.com/-JomZmCKE01Q/TuJTC6oQ2RI/AAAAAAAACkI/auMRjgllsQU/emoticon-00167-beer.gif" alt="beer">
+	<img src="http://lh4.googleusercontent.com/-x-PB2CuuKoQ/TuJTDvcrVwI/AAAAAAAACkc/ceQzQPx-T-A/emoticon-00168-drink.gif" alt="drink">
+	<img src="http://lh3.googleusercontent.com/-u9LD-n24B9s/TuJTDfxLedI/AAAAAAAACkU/uxCTz7dWz5c/emoticon-00169-dance.gif" alt="dance">
+	<img src="http://lh4.googleusercontent.com/-U0ffaQfD_vw/TuJTEAkJBWI/AAAAAAAACk8/mN2FR9icpRM/emoticon-00170-ninja.gif" alt="ninja">
+	<img src="http://lh6.googleusercontent.com/-QsMEgH0mN1I/TuJTEcWWQ3I/AAAAAAAACkk/CI0OOxRYMZs/emoticon-00171-star.gif" alt="star">
+	<img src="http://lh4.googleusercontent.com/-szA0HCpDsNs/TuJTE3XeE6I/AAAAAAAACk4/-0Tuw5g_sSw/emoticon-00172-mooning.gif" alt="mooning">
+	<img src="http://lh4.googleusercontent.com/-FxvM8ZidOsw/TuJTFSMk7_I/AAAAAAAAClA/8EbfZz_0SlI/emoticon-00173-middlefinger.gif" alt="middlefinger">
+	<img src="http://lh6.googleusercontent.com/-hnpdsvK3nZc/TuJTF2DcT7I/AAAAAAAAClE/b9VjnDujJgU/emoticon-00174-bandit.gif" alt="bandit">
+	<img src="http://lh5.googleusercontent.com/-RHVUrB6xSnQ/TuJTGJSKS3I/AAAAAAAAClc/JhqAVWaFCqA/emoticon-00175-drunk.gif" alt="drunk">
+	<img src="http://lh3.googleusercontent.com/-bXH5-9ugxNQ/TuJTGXBjV1I/AAAAAAAAClM/ztZ2Iv4wCAE/emoticon-00176-smoke.gif" alt="smoke">
+	<img src="http://lh5.googleusercontent.com/-i4U1ORl4lk8/TuJTG-RzAgI/AAAAAAAACls/e3nP7W8QbtQ/emoticon-00177-toivo.gif" alt="toivo">
+	<img src="http://lh3.googleusercontent.com/-7fixai_flB4/TuJTHKp8WUI/AAAAAAAAClg/ZjQjzgPYkMA/emoticon-00178-rock.gif" alt="rock">
+	<img src="http://lh3.googleusercontent.com/-bhCMQTA7D3Y/TuJTH7UBy0I/AAAAAAAAClk/1n4sGgo0QLw/emoticon-00179-headbang.gif" alt="headbang">
+	<img src="http://lh3.googleusercontent.com/-UnvgcEMytDo/TuJTICd48RI/AAAAAAAAClw/nUkmTypwhY4/emoticon-00180-bug.gif" alt="bug">
+	<img src="http://lh4.googleusercontent.com/-40oA0yoMd4k/TuJTIeaIOoI/AAAAAAAACl4/enyYDa8ZD0s/emoticon-00181-fubar.gif" alt="fubar">
+	<img src="http://lh5.googleusercontent.com/-xBf8gncPrB8/TuJTI1YHfmI/AAAAAAAACl8/cMJNLTZtgXo/emoticon-00182-poolparty.gif" alt="poolparty">
+	<img src="http://lh5.googleusercontent.com/-FnROs8dFZoQ/TuJTJNsyKGI/AAAAAAAACmE/4YrRjAOBmxw/emoticon-00183-swear.gif" alt="swear">
+	<img src="http://lh5.googleusercontent.com/-yhmaCsR41sw/TuJTJfTFroI/AAAAAAAACmM/a6zAD45mwQQ/emoticon-00184-tmi.gif" alt="tmi">
+</div>
+</div>
+</div><!-- end plugins -->
+	<!-- EDITOR -->
+	<table style="width:100%;height:100%;overflow:hidden;border:1px solid #aaa;" cellspacing="0" cellpadding="0" border="0">
+	<tr><td id="toolbars" class="unselectable">
+		<!-- toolbars -->
+	</td><tr>
+	<tr style="height:100%"><td>
+		<iframe id="iframeEditable" frameborder="0" allowtransparency="true" style="width:100%;height:100%;"></iframe>
+	</td></tr>
+	</table>
+		
+</body>
+</html>
